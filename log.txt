@@ -1,0 +1,14 @@
+Hello, World!
+Opened video device...
+Device "/dev/fb0": 1920x1080 32bpp...
+Loading /home/joe/proj/C++/uwin/leaf.jpg
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
+FPS: 60
