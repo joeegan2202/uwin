@@ -12,6 +12,8 @@ enum WindowMessageType {
 struct NewWindow {
 char name[64];
 long id;
+int w;
+int h;
 };
 
 struct WindowMessage {

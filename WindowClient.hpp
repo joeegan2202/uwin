@@ -6,6 +6,7 @@
 #define UWIN_WINDOWCLIENT_HPP
 
 #include "WindowMessage.hpp"
+#include "Framebuffer.hpp"
 
 namespace uwin {
 
@@ -13,9 +14,14 @@ namespace uwin {
     public:
         WindowClient();
         ~WindowClient();
+    	void establish();
+        Framebuffer *getFramebuffer() {
+            return fbuf;
+        }
     private:
         WindowMessage sendMessage(WindowMessage);
         int sock_fd;
+        Framebuffer *fbuf;
     };
 
 }

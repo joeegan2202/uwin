@@ -6,3 +6,5 @@ set(CMAKE_CXX_STANDARD 17)
 add_executable(uwin-server Framebuffer.cpp VideoDevice.cpp Image.cpp WindowServer.cpp Window.cpp main.cpp)
 
 add_library(uwin WindowClient.cpp Framebuffer.cpp Window.cpp)
+
+add_executable(dumb-client Framebuffer.cpp WindowClient.cpp Image.cpp test/test.cpp)
