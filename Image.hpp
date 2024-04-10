@@ -5,6 +5,7 @@
 #ifndef UWIN_IMAGE_HPP
 #define UWIN_IMAGE_HPP
 
+#include <cstdint>
 #include <string>
 
 class Image {

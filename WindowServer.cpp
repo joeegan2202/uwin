@@ -4,6 +4,9 @@
 
 #include "WindowServer.hpp"
 
+#include "Mouse.hpp"
+#include "Cursor.hpp"
+
 #include <chrono>
 #include <thread>
 #include <iostream>
@@ -33,6 +36,11 @@ void WindowServer::start() {
 	should_run = true;
 	std::thread listener(&WindowServer::listen, this);
 
+	initializeMouse();
+	std::thread mouse_input(pollEvents, std::ref(should_run));
+
+	Cursor cursor;
+
 	pid_t id = fork();
 	if(id == 0) {
 		execl("build/dumb-client", (char *)NULL);
@@ -46,12 +54,14 @@ void WindowServer::start() {
 		// Render all
 		{
 			std::lock_guard<std::mutex> guard(activeWindows_m);
-			DEBUG(activeWindows.size() << " windows")
 			for (std::pair<int, Window *> p : activeWindows)
 			{
 				buffer.blit(p.second->framebuffer, p.second->x, p.second->y);
 			}
 		}
+
+		Point loc = getLocation();
+		buffer.blit(cursor.icon, loc.x, loc.y);
 
 		videoDevice.blit(buffer);
 		frames++;
@@ -61,20 +71,22 @@ void WindowServer::start() {
 			auto remaining = std::chrono::duration<double,std::milli>{16.667} - (now_time - initial_time);
 			std::this_thread::sleep_for(remaining);
 		} else {
-			std::cout << "Skipped time in the frame!" << std::endl;
+			std::cout << "Skipped time in the frame!\n";
 		}
 
 		initial_time = std::chrono::high_resolution_clock::now();
 
     if(initial_time - last_second >= std::chrono::duration<double,std::milli>{1000}) {
       last_second = initial_time;
-      std::cout << "FPS: " << frames << std::endl;
+      std::cout << "FPS: " << frames << '\n';
       frames = 0;
     }
 	}
 
 	should_run = false;
 	listener.join();
+
+	std::cout.flush();
 }
 
 void WindowServer::newWindow(std::string name, int width, int height, struct sockaddr_un *addr, socklen_t *length) {

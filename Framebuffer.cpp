@@ -40,10 +40,20 @@ void Framebuffer::blit(const Image &image, ssize_t x_off, ssize_t y_off) {
             if(j + x_off >= width) break;
             unsigned fb_offset = ((i + y_off) * width + j + x_off) * channels;
             unsigned img_offset = (i * image.getXres() + j) * channels;
-            framebuffer_map[fb_offset] = image.memory[img_offset];
-            framebuffer_map[fb_offset + 1] = image.memory[img_offset + 1];
-            framebuffer_map[fb_offset + 2] = image.memory[img_offset + 2];
-            framebuffer_map[fb_offset + 3] = image.memory[img_offset + 3];
+            switch (image.memory[img_offset + 3])
+            {
+            case 0:
+                break;
+            case 255:
+                framebuffer_map[fb_offset] = image.memory[img_offset];
+                framebuffer_map[fb_offset + 1] = image.memory[img_offset + 1];
+                framebuffer_map[fb_offset + 2] = image.memory[img_offset + 2];
+                framebuffer_map[fb_offset + 3] = image.memory[img_offset + 3];
+                break;
+            default:
+                // TODO: Implement alpha blitting
+                break;
+            }
         }
     }
 }

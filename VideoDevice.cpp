@@ -8,7 +8,6 @@
 #include <sys/mman.h>
 #include <sys/ioctl.h>
 #include <fcntl.h>
-#include <cstring>
 #include <unistd.h>
 #include <linux/vt.h>
 #include <linux/kd.h>
@@ -33,11 +32,13 @@ VideoDevice::VideoDevice(const std::string& d) : deviceFileName(d) {
 
     std::cout << "Device \"" << deviceFileName << "\": " << vinfo.xres << "x" << vinfo.yres << " " << vinfo.bits_per_pixel << "bpp..." << std::endl;
 
-		deviceFb = Framebuffer(device_file_descriptor, vinfo.xres, vinfo.yres, vinfo.bits_per_pixel >> 3);
+	deviceFb = Framebuffer(device_file_descriptor, vinfo.xres, vinfo.yres, vinfo.bits_per_pixel >> 3);
+
+    //disableTty();
 }
 
 VideoDevice::~VideoDevice() {
-    // DANGER ioctl(ttyfd, KDSETMODE, KD_TEXT);
+    //ioctl(ttyfd, KDSETMODE, KD_TEXT);
 }
 
 void VideoDevice::disableTty() {
