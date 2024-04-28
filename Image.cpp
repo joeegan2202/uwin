@@ -10,7 +10,7 @@
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-Image::Image(const std::string& file_location) {
+Image::Image(std::string file_location) {
     std::filesystem::path real_location = std::filesystem::current_path().append(file_location);
     std::cout << "Loading " << real_location.c_str() << std::endl;
     memory = stbi_load(real_location.c_str(), &xres, &yres, &bpp, 4);

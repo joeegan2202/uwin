@@ -17,6 +17,8 @@ public:
 
     void blit(const Image &image, ssize_t x_off, ssize_t y_off);
     void blit(const Framebuffer &image, ssize_t x_off, ssize_t y_off);
+    int getWidth();
+    int getHeight();
 private:
 	int fd;
     int width, height, channels;

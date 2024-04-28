@@ -78,3 +78,11 @@ void Framebuffer::blit(const Framebuffer &f, ssize_t x_off, ssize_t y_off) {
         }
     }
 }
+
+int Framebuffer::getWidth() {
+  return width;
+}
+
+int Framebuffer::getHeight() {
+  return height;
+}

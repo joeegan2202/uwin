@@ -40,11 +40,11 @@
 
             # stdlib for cpp
             llvm.libcxx
-              
-            # libs
-            glm
-            SDL2
-            SDL2_gfx
+
+            #pkg-config
+            pkg-config
+
+            libevdev
           ];
           name = "C";
         };

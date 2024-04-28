@@ -4,18 +4,51 @@
 
 #include "WindowServer.hpp"
 
+#include "EventManager.hpp"
 #include "Mouse.hpp"
-#include "Cursor.hpp"
+#include "Signal.hpp"
+#include "Panel.hpp"
+#include "libevdev/libevdev.h"
 
 #include <chrono>
 #include <thread>
 #include <iostream>
 
 #include <sys/mman.h>
+#include <sys/poll.h>
 #include <unistd.h>
 #include <string.h>
 
-#define DEBUG(x) std::cout << x << std::endl;
+#define DEBUG(x) std::cout << std::chrono::high_resolution_clock::now().time_since_epoch().count() << " - " << x << std::endl;
+
+std::stack<Signal> signals;
+
+std::stack<Signal> listener_signals;
+
+class CtrlAltDel : public EventListener {
+  public:
+    using EventListener::EventListener;
+    CtrlAltDel() : EventListener(std::bind(&CtrlAltDel::ctrlAltDel, this, std::placeholders::_1)), ctrl(false), alt(false) {}
+  private:
+    bool ctrl, alt;
+
+    void ctrlAltDel(std::shared_ptr<struct input_event> event) {
+      if(event->type == EV_KEY) {
+        if(event->code == KEY_LEFTCTRL) {
+          ctrl = event->value;
+        } else if(event->code == KEY_RIGHTCTRL) {
+          ctrl = event->value;
+        } else if(event->code == KEY_LEFTALT) {
+          alt = event->value;
+        } else if(event->code == KEY_RIGHTALT) {
+          alt = event->value;
+        } else if(event->code == KEY_BACKSPACE && ctrl && alt) {
+          DEBUG("Attempting to quit...")
+          signals.push({SIG_KILL, "CTRLALTDEL"});
+        }
+      }
+    }
+};
 
 WindowServer::WindowServer(VideoDevice& device, const Image &image) : videoDevice(device), buffer(device.getWidth(), device.getHeight(), device.getChannels()), backgroundImage(image) {
 
@@ -36,21 +69,52 @@ void WindowServer::start() {
 	should_run = true;
 	std::thread listener(&WindowServer::listen, this);
 
-	initializeMouse();
-	std::thread mouse_input(pollEvents, std::ref(should_run));
+  EventManager eMan;
 
-	Cursor cursor;
+  Mouse mouse;
+
+  eMan.registerListener(mouse.getListener());
+
+  auto printer = std::make_shared<EventListener>([](std::shared_ptr<struct input_event> event) {
+      std::cout << "Event: " << libevdev_event_code_get_name(event->type, event->code) << " Type: " << event->type << " Code: " << event->code << " Value: " << event->value << std::endl;
+  });
+  eMan.registerListener(printer);
+
+  auto exit = std::make_shared<CtrlAltDel>();
+  eMan.registerListener(exit);
+
+	Image cursor("cursor.bmp");
+
+  Panel panel;
 
 	pid_t id = fork();
 	if(id == 0) {
-		execl("build/dumb-client", (char *)NULL);
+		execl("build/dumb-client", "build/dumb-client", (char *)NULL);
 		std::cerr << "Didn't exec!!!" << std::endl;
 		return;
 	}
 
 	//Temporarily count up to 10 seconds at 60 fps
-	while(counter--) {
+	while(should_run) {
+    while(!signals.empty()) {
+      auto signal = signals.top();
+
+      std::cout << "Signal: \"" << signal.msg << "\"" << std::endl;
+      if(signal.type == SIG_KILL) {
+        should_run = false;
+        listener_signals.push(signal);
+      }
+
+      signals.pop();
+    }
+
+    eMan.poll();
+
 		buffer.blit(backgroundImage, 0, 0);
+
+    Framebuffer panel_fb = panel.getPanel(activeWindows);
+    buffer.blit(panel_fb, 0, 1080-panel_fb.getHeight());
+
 		// Render all
 		{
 			std::lock_guard<std::mutex> guard(activeWindows_m);
@@ -60,8 +124,8 @@ void WindowServer::start() {
 			}
 		}
 
-		Point loc = getLocation();
-		buffer.blit(cursor.icon, loc.x, loc.y);
+		Point loc = mouse.getLocation();
+		buffer.blit(cursor, loc.x, loc.y);
 
 		videoDevice.blit(buffer);
 		frames++;
@@ -83,9 +147,8 @@ void WindowServer::start() {
     }
 	}
 
-	should_run = false;
+  DEBUG("Waiting to join socket server thread...")
 	listener.join();
-
 	std::cout.flush();
 }
 
@@ -171,28 +234,31 @@ void WindowServer::listen() {
 	bind(sock_fd, (struct sockaddr *)&addr, sizeof(sockaddr_un));
 	DEBUG("Bound server socket")
 
+  struct pollfd pollfds[1] = {{sock_fd, POLLIN, 0}};
 	WindowMessage request;
 	struct sockaddr_un addr_from;
 	socklen_t addr_length;
 	while(should_run) {
-		memset(&request, 0, sizeof(WindowMessage));
-		memset(&addr_from, 0, sizeof(struct sockaddr_un));
-		addr_length = sizeof(struct sockaddr_un);
+    memset(&request, 0, sizeof(WindowMessage));
+    memset(&addr_from, 0, sizeof(struct sockaddr_un));
+    addr_length = sizeof(struct sockaddr_un);
 
-		DEBUG("Server waiting for message")
-		int bytes_read = recvfrom(sock_fd, &request, sizeof(WindowMessage), 0, (struct sockaddr *)&addr_from, &addr_length);
+    DEBUG("Server waiting for message")
+    if(poll(pollfds, 1, 100) > 0) {
+      int bytes_read = recvfrom(sock_fd, &request, sizeof(WindowMessage), 0, (struct sockaddr *)&addr_from, &addr_length);
 
-		DEBUG("Got " << bytes_read << " bytes")
+      DEBUG("Got " << bytes_read << " bytes")
 
-		if(bytes_read != sizeof(WindowMessage))
-			std::cerr << "Read not enough bytes! Continuing..." << std::endl;
+      if(bytes_read != sizeof(WindowMessage))
+        std::cerr << "Read not enough bytes! Continuing..." << std::endl;
 
-		switch(request.type) {
-			case WINDOW_NEW:
-			newWindow(request.body.newWindow.name, request.body.newWindow.w, request.body.newWindow.h, &addr_from, &addr_length);
-			break;
-			default:
-			std::cerr << "Unknown window message received!" << std::endl;
-		}
+      switch(request.type) {
+        case WINDOW_NEW:
+          newWindow(request.body.newWindow.name, request.body.newWindow.w, request.body.newWindow.h, &addr_from, &addr_length);
+          break;
+        default:
+          std::cerr << "Unknown window message received!" << std::endl;
+      }
+    }
 	}
 }

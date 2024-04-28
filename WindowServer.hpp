@@ -17,12 +17,12 @@
 #include <sys/un.h>
 
 class WindowServer {
-public:
+  public:
     WindowServer(VideoDevice&, const Image&);
     ~WindowServer();
     void start();
-private:
-	VideoDevice& videoDevice;
+  private:
+    VideoDevice& videoDevice;
     Framebuffer buffer;
     const Image &backgroundImage;
     std::mutex activeWindows_m;

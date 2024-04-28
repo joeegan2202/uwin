@@ -10,7 +10,7 @@
 
 class Image {
 public:
-    explicit Image(const std::string& file_location);
+    explicit Image(std::string file_location);
     ~Image();
     [[nodiscard]] int getXres() const { return xres; }
     [[nodiscard]] int getYres() const { return yres; }

@@ -1,4 +1,3 @@
-
 #ifndef UWIN_WINDOW_HPP
 #define UWIN_WINDOW_HPP
 
