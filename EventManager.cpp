@@ -8,8 +8,6 @@
 
 EventListener::EventListener(std::function<void(std::shared_ptr<struct input_event>)> callback) : callback(callback) {}
 
-EventListener::~EventListener() {}
-
 void EventListener::run(std::shared_ptr<struct input_event> event) {
   callback(event);
 }
@@ -43,6 +41,10 @@ void EventManager::registerListener(std::weak_ptr<EventListener> listener) {
   listeners.insert(listener);
 }
 
+void EventManager::registerTimeKeeper(std::weak_ptr<TimeKeeper> time_keeper) {
+  time_keepers.insert(time_keeper);
+}
+
 void EventManager::poll() {
   bool inputs = true;
   while(inputs) {
@@ -71,6 +73,8 @@ void EventManager::poll() {
       }
     }
   }
+
+  keepTime();
 }
 
 void EventManager::dispatch(std::shared_ptr<struct input_event> event) {
@@ -83,4 +87,22 @@ void EventManager::dispatch(std::shared_ptr<struct input_event> event) {
       i = listeners.erase(i);
     }
   };
+}
+
+void EventManager::keepTime() {
+  for(auto i = time_keepers.begin(); i != time_keepers.end();) {
+    auto time_keeper = i->lock();
+    if(time_keeper) {
+      time_keeper->run(std::chrono::high_resolution_clock::now());
+      i++;
+    } else {
+      i = time_keepers.erase(i);
+    }
+  }
+}
+
+TimeKeeper::TimeKeeper(std::function<void(std::chrono::high_resolution_clock::time_point)> callback) : callback(callback) {}
+
+void TimeKeeper::run(std::chrono::high_resolution_clock::time_point time) {
+  callback(time);
 }

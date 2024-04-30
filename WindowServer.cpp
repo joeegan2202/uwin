@@ -8,10 +8,13 @@
 #include "Mouse.hpp"
 #include "Signal.hpp"
 #include "Panel.hpp"
+#include "LaunchHelper.hpp"
 #include "libevdev/libevdev.h"
 
 #include <chrono>
+#include <functional>
 #include <thread>
+#include <list>
 #include <iostream>
 
 #include <sys/mman.h>
@@ -50,13 +53,7 @@ class CtrlAltDel : public EventListener {
     }
 };
 
-WindowServer::WindowServer(VideoDevice& device, const Image &image) : videoDevice(device), buffer(device.getWidth(), device.getHeight(), device.getChannels()), backgroundImage(image) {
-
-}
-
-WindowServer::~WindowServer() {
-
-}
+WindowServer::WindowServer(VideoDevice& device, const Image &image) : videoDevice(device), buffer(device.getWidth(), device.getHeight(), device.getChannels()), backgroundImage(image) {}
 
 void WindowServer::start() {
 	auto initial_time = std::chrono::high_resolution_clock::now();
@@ -71,14 +68,19 @@ void WindowServer::start() {
 
   EventManager eMan;
 
-  Mouse mouse;
+  Mouse mouse(std::bind(&WindowServer::handleClickCallback, this, std::placeholders::_1, std::placeholders::_2),
+      std::bind(&WindowServer::handleDragCallback, this, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3));
+  mouse.setMode(MouseMode::CURSOR);
 
   eMan.registerListener(mouse.getListener());
+  eMan.registerTimeKeeper(mouse.getTimeKeeper());
 
+  /*
   auto printer = std::make_shared<EventListener>([](std::shared_ptr<struct input_event> event) {
       std::cout << "Event: " << libevdev_event_code_get_name(event->type, event->code) << " Type: " << event->type << " Code: " << event->code << " Value: " << event->value << std::endl;
   });
   eMan.registerListener(printer);
+  */
 
   auto exit = std::make_shared<CtrlAltDel>();
   eMan.registerListener(exit);
@@ -87,14 +89,10 @@ void WindowServer::start() {
 
   Panel panel;
 
-	pid_t id = fork();
-	if(id == 0) {
-		execl("build/dumb-client", "build/dumb-client", (char *)NULL);
-		std::cerr << "Didn't exec!!!" << std::endl;
-		return;
-	}
+  launchers.emplace_back("default_ico.bmp", "Default", "build/dumb-client", std::vector<std::string>{});
 
-	//Temporarily count up to 10 seconds at 60 fps
+  //LauncherHelper::launch("build/dumb-client", {});
+
 	while(should_run) {
     while(!signals.empty()) {
       auto signal = signals.top();
@@ -112,15 +110,19 @@ void WindowServer::start() {
 
 		buffer.blit(backgroundImage, 0, 0);
 
-    Framebuffer panel_fb = panel.getPanel(activeWindows);
+    Framebuffer panel_fb = panel.getPanel(liveWindows);
     buffer.blit(panel_fb, 0, 1080-panel_fb.getHeight());
+
+    for(auto &launcher : launchers) {
+      buffer.blit(launcher.getFramebuffer(), launcher.bounds.getTopLeft().x, launcher.bounds.getTopLeft().y);
+    }
 
 		// Render all
 		{
-			std::lock_guard<std::mutex> guard(activeWindows_m);
-			for (std::pair<int, Window *> p : activeWindows)
+			std::lock_guard<std::mutex> guard(orderedWindows_m);
+			for (Window * w : orderedWindows)
 			{
-				buffer.blit(p.second->framebuffer, p.second->x, p.second->y);
+				buffer.blit(w->framebuffer, w->bounds.getTopLeft().x, w->bounds.getTopLeft().y);
 			}
 		}
 
@@ -152,6 +154,51 @@ void WindowServer::start() {
 	std::cout.flush();
 }
 
+void WindowServer::handleClickCallback(int button, Point location) {
+  bool placed = false;
+  {
+    std::lock_guard<std::mutex> guard(orderedWindows_m);
+
+    for(Window *w : orderedWindows) {
+      if(w->bounds.contains(location)) {
+        // TODO: Assign event to window
+        placed = true;
+        break;
+      }
+    }
+  }
+
+  if(!placed) {
+    for(auto &l : launchers) {
+      if(l.bounds.contains(location)) {
+        l.launch();
+        placed = true;
+        break;
+      }
+    }
+  }
+
+  /* For panel buttons... TODO
+  if(!placed) {
+    for(auto &l : launchers) {
+      if(l.bounds.contains(location)) {
+        l.launch();
+        placed = true;
+        break;
+      }
+    }
+  }
+  */
+}
+
+void WindowServer::handleDragCallback(int button, bool still_dragging, Point location) {
+  if(still_dragging) {
+    std::cout << "Dragging!\n";
+  } else {
+    std::cout << "Done dragging!\n";
+  }
+}
+
 void WindowServer::newWindow(std::string name, int width, int height, struct sockaddr_un *addr, socklen_t *length) {
 	DEBUG("Creating new window...")
 	int mem_fd = memfd_create(name.c_str(), 0);
@@ -162,11 +209,12 @@ void WindowServer::newWindow(std::string name, int width, int height, struct soc
 
 	int id = 0;
 	{
-		std::lock_guard<std::mutex> guard(activeWindows_m);
-		while (activeWindows.find(id) != activeWindows.end())
+		std::lock_guard<std::mutex> guard(orderedWindows_m);
+		while (liveWindows.find(id) != liveWindows.end())
 			id++;
 
-		activeWindows[id] = new Window(name, mem_fd, width, height, 0, 0);
+		liveWindows[id] = new Window(name, mem_fd, width, height, 0, 0);
+    orderedWindows.push_front(liveWindows[id]);
 	}
 
 	WindowMessage msg = {

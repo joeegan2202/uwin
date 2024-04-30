@@ -6,16 +6,16 @@
 #define UWIN_IMAGE_HPP
 
 #include <cstdint>
+#include <memory>
 #include <string>
 
 class Image {
 public:
     explicit Image(std::string file_location);
-    ~Image();
     [[nodiscard]] int getXres() const { return xres; }
     [[nodiscard]] int getYres() const { return yres; }
     [[nodiscard]] int getBpp() const { return bpp; }
-    uint8_t *memory;
+    std::unique_ptr<uint8_t> memory;
 private:
     int xres, yres, bpp;
 };

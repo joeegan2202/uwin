@@ -2,6 +2,7 @@
 #define UWIN_WINDOW_HPP
 
 #include "Framebuffer.hpp"
+#include "Geometry.hpp"
 
 #include <string>
 
@@ -11,7 +12,7 @@ public:
 	~Window();
 	Framebuffer framebuffer;
 	int memFd;
-	int width, height, x, y;
+  Rectangle bounds;
 	std::string name;
 	uint8_t *memory;
 	int length;

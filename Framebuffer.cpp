@@ -30,7 +30,7 @@ Framebuffer::~Framebuffer() {
 // FB: BGRT
 void Framebuffer::blit(const Image &image, ssize_t x_off, ssize_t y_off) {
     if(x_off == 0 && y_off == 0 && image.getXres() == width && image.getYres() == height) {
-        memcpy(framebuffer_map, image.memory, screen_size);
+        memcpy(framebuffer_map, image.memory.get(), screen_size);
         return;
     }
 
@@ -40,18 +40,26 @@ void Framebuffer::blit(const Image &image, ssize_t x_off, ssize_t y_off) {
             if(j + x_off >= width) break;
             unsigned fb_offset = ((i + y_off) * width + j + x_off) * channels;
             unsigned img_offset = (i * image.getXres() + j) * channels;
-            switch (image.memory[img_offset + 3])
+            switch (image.memory.get()[img_offset + 3])
             {
             case 0:
                 break;
             case 255:
-                framebuffer_map[fb_offset] = image.memory[img_offset];
-                framebuffer_map[fb_offset + 1] = image.memory[img_offset + 1];
-                framebuffer_map[fb_offset + 2] = image.memory[img_offset + 2];
-                framebuffer_map[fb_offset + 3] = image.memory[img_offset + 3];
+                framebuffer_map[fb_offset] = image.memory.get()[img_offset];
+                framebuffer_map[fb_offset + 1] = image.memory.get()[img_offset + 1];
+                framebuffer_map[fb_offset + 2] = image.memory.get()[img_offset + 2];
+                framebuffer_map[fb_offset + 3] = image.memory.get()[img_offset + 3];
                 break;
             default:
-                // TODO: Implement alpha blitting
+                float alpha = image.memory.get()[img_offset + 3] / 255.0f;
+                framebuffer_map[fb_offset] *= 1.0f - alpha;
+                framebuffer_map[fb_offset + 1] *= 1.0f - alpha;
+                framebuffer_map[fb_offset + 2] *= 1.0f - alpha;
+                framebuffer_map[fb_offset + 3] *= 1.0f - alpha;
+                framebuffer_map[fb_offset] += alpha * image.memory.get()[img_offset];
+                framebuffer_map[fb_offset + 1] += alpha * image.memory.get()[img_offset + 1];
+                framebuffer_map[fb_offset + 2] += alpha * image.memory.get()[img_offset + 2];
+                framebuffer_map[fb_offset + 3] += alpha * image.memory.get()[img_offset + 3];
                 break;
             }
         }
@@ -71,10 +79,28 @@ void Framebuffer::blit(const Framebuffer &f, ssize_t x_off, ssize_t y_off) {
             if(j + x_off >= width) break;
             unsigned fb_offset = ((i + y_off) * width + j + x_off) * channels;
             unsigned img_offset = (i * f.width + j) * channels;
-            framebuffer_map[fb_offset] = f.framebuffer_map[img_offset];
-            framebuffer_map[fb_offset + 1] = f.framebuffer_map[img_offset + 1];
-            framebuffer_map[fb_offset + 2] = f.framebuffer_map[img_offset + 2];
-            framebuffer_map[fb_offset + 3] = f.framebuffer_map[img_offset + 3];
+            switch (f.framebuffer_map[img_offset + 3])
+            {
+            case 0:
+                break;
+            case 255:
+                framebuffer_map[fb_offset] = f.framebuffer_map[img_offset];
+                framebuffer_map[fb_offset + 1] = f.framebuffer_map[img_offset + 1];
+                framebuffer_map[fb_offset + 2] = f.framebuffer_map[img_offset + 2];
+                framebuffer_map[fb_offset + 3] = f.framebuffer_map[img_offset + 3];
+                break;
+            default:
+                float alpha = f.framebuffer_map[img_offset + 3] / 255.0f;
+                framebuffer_map[fb_offset] *= 1.0f - alpha;
+                framebuffer_map[fb_offset + 1] *= 1.0f - alpha;
+                framebuffer_map[fb_offset + 2] *= 1.0f - alpha;
+                framebuffer_map[fb_offset + 3] *= 1.0f - alpha;
+                framebuffer_map[fb_offset] += alpha * f.framebuffer_map[img_offset];
+                framebuffer_map[fb_offset + 1] += alpha * f.framebuffer_map[img_offset + 1];
+                framebuffer_map[fb_offset + 2] += alpha * f.framebuffer_map[img_offset + 2];
+                framebuffer_map[fb_offset + 3] += alpha * f.framebuffer_map[img_offset + 3];
+                break;
+            }
         }
     }
 }
