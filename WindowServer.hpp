@@ -10,6 +10,7 @@
 #include "VideoDevice.hpp"
 #include "Geometry.hpp"
 #include "Launcher.hpp"
+#include "Titlebar.hpp"
 
 #include <unordered_map>
 #include <list>
@@ -18,6 +19,13 @@
 
 #include <sys/socket.h>
 #include <sys/un.h>
+
+struct WindowHolder {
+  Window * w;
+  Titlebar t;
+  int z_level;
+  int panel_level;
+};
 
 class WindowServer {
   public:
@@ -28,13 +36,14 @@ class WindowServer {
     Framebuffer buffer;
     const Image &backgroundImage;
 
-    std::unordered_map<int, Window *> liveWindows;
-    std::mutex orderedWindows_m;
-    std::list<Window *> orderedWindows;
+    std::mutex liveWindows_m;
+    std::unordered_map<int, WindowHolder> liveWindows;
+    //std::list<std::tuple<Window *, Titlebar>> orderedWindows;
     Window *activeWindow;
     std::list<Launcher> launchers;
     void handleClickCallback(int button, Point location);
     void handleDragCallback(int button, bool still_dragging, Point location);
+    int dragged_window = 0;
 
     void newWindow(std::string name, int width, int height, struct sockaddr_un *, socklen_t *);
     void sendMessageWithFileDescriptor(WindowMessage, int, struct sockaddr_un *, socklen_t *);

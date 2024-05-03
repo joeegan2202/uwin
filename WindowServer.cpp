@@ -16,6 +16,8 @@
 #include <thread>
 #include <list>
 #include <iostream>
+#include <tuple>
+#include <climits>
 
 #include <sys/mman.h>
 #include <sys/poll.h>
@@ -54,6 +56,36 @@ class CtrlAltDel : public EventListener {
 };
 
 WindowServer::WindowServer(VideoDevice& device, const Image &image) : videoDevice(device), buffer(device.getWidth(), device.getHeight(), device.getChannels()), backgroundImage(image) {}
+
+int max_orderedZ(std::unordered_map<int, WindowHolder> &map, int MAX) {
+  int max = -1;
+  for(auto [id, w] : map) {
+    if(w.z_level > max && w.z_level < MAX) max = w.z_level;
+  }
+
+  return max;
+}
+
+int min_orderedZ(std::unordered_map<int, WindowHolder> &map) {
+  int min = INT_MAX;
+  for(auto [id, w] : map) {
+    if(w.z_level < min) min = w.z_level;
+  }
+
+  return min;
+}
+
+void r_orderedZForeach(std::unordered_map<int, WindowHolder> &map, std::function<void(WindowHolder &)> func, int max) {
+  func(map.at(max));
+
+  if(max != min_orderedZ(map)) r_orderedZForeach(map, func, max_orderedZ(map, max));
+}
+
+void orderedZForeach(std::unordered_map<int, WindowHolder> &map, std::function<void(WindowHolder &)> func) {
+  if(map.size() == 0) return;
+
+  r_orderedZForeach(map, func, max_orderedZ(map, INT_MAX));
+}
 
 void WindowServer::start() {
 	auto initial_time = std::chrono::high_resolution_clock::now();
@@ -118,12 +150,12 @@ void WindowServer::start() {
     }
 
 		// Render all
-		{
-			std::lock_guard<std::mutex> guard(orderedWindows_m);
-			for (Window * w : orderedWindows)
-			{
-				buffer.blit(w->framebuffer, w->bounds.getTopLeft().x, w->bounds.getTopLeft().y);
-			}
+    {
+      std::lock_guard<std::mutex> guard(liveWindows_m);
+      orderedZForeach(liveWindows, [&buffer=buffer](WindowHolder &w) { 
+          buffer.blit(w.t.fb, w.t.outer_bounds.getTopLeft().x, w.t.outer_bounds.getTopLeft().y);
+          buffer.blit(w.w->framebuffer, w.w->bounds.getTopLeft().x, w.w->bounds.getTopLeft().y);
+          });
 		}
 
 		Point loc = mouse.getLocation();
@@ -157,15 +189,14 @@ void WindowServer::start() {
 void WindowServer::handleClickCallback(int button, Point location) {
   bool placed = false;
   {
-    std::lock_guard<std::mutex> guard(orderedWindows_m);
+    std::lock_guard<std::mutex> guard(liveWindows_m);
 
-    for(Window *w : orderedWindows) {
-      if(w->bounds.contains(location)) {
+    orderedZForeach(liveWindows, [location,&placed](WindowHolder &w) {
+      if(w.w->bounds.contains(location)) {
         // TODO: Assign event to window
         placed = true;
-        break;
       }
-    }
+    });
   }
 
   if(!placed) {
@@ -192,10 +223,33 @@ void WindowServer::handleClickCallback(int button, Point location) {
 }
 
 void WindowServer::handleDragCallback(int button, bool still_dragging, Point location) {
-  if(still_dragging) {
-    std::cout << "Dragging!\n";
+  std::cout << "window: " << dragged_window << ", still_dragging: " << still_dragging << ", {" << location.x << ", " << location.y << "}" << std::endl;
+  if(dragged_window == 0) {
+    {
+      std::lock_guard<std::mutex> guard(liveWindows_m);
+
+      std::cout << "Dragging when no dragged window!" << std::endl;
+      orderedZForeach(liveWindows, [this,location](WindowHolder &w) {
+        if(w.w->bounds.contains(location)) {
+          // TODO: Assign event to window
+          std::cout << "Dragging in window!" << std::endl;
+        //} else if(w.t.outer_bounds.contains(location)) {
+        } else {
+          std::cout << "Caught panel!" << std::endl;
+          dragged_window = w.w->id;
+        }
+      });
+    }
   } else {
-    std::cout << "Done dragging!\n";
+    {
+      std::lock_guard<std::mutex> guard(liveWindows_m);
+      std::cout << "Updating window!" << std::endl;
+      auto &w = liveWindows.at(dragged_window);
+      w.t.outer_bounds = Rectangle::fromWidthHeight({.x = w.t.outer_bounds.getTopLeft().x + location.x, .y = w.t.outer_bounds.getTopLeft().y + location.y}, w.t.outer_bounds.getWidth(), w.t.outer_bounds.getHeight());
+      w.w->bounds = Rectangle::fromWidthHeight({.x = w.w->bounds.getTopLeft().x + location.x, .y = w.w->bounds.getTopLeft().y + location.y}, w.w->bounds.getWidth(), w.w->bounds.getHeight());
+    }
+
+    if(!still_dragging) dragged_window = 0;
   }
 }
 
@@ -209,12 +263,12 @@ void WindowServer::newWindow(std::string name, int width, int height, struct soc
 
 	int id = 0;
 	{
-		std::lock_guard<std::mutex> guard(orderedWindows_m);
+		std::lock_guard<std::mutex> guard(liveWindows_m);
 		while (liveWindows.find(id) != liveWindows.end())
 			id++;
 
-		liveWindows[id] = new Window(name, mem_fd, width, height, 0, 0);
-    orderedWindows.push_front(liveWindows[id]);
+		Window *w = new Window(id, name, mem_fd, width, height, 100, 100);
+    liveWindows.emplace(id, WindowHolder{w, Titlebar::make(w->name, w->bounds), id, id});
 	}
 
 	WindowMessage msg = {

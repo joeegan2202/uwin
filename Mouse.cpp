@@ -80,6 +80,7 @@ void Mouse::keepTime(std::chrono::high_resolution_clock::time_point now) {
     } else {
       if(std::abs(pending.position.x - currentLocation.x) > 2 || std::abs(pending.position.y - currentLocation.y) > 2) {
         // We're handling a drag, not a click
+        drag_callback(pending.button, false, currentLocation);
         drag_callback(pending.button, false, Point{.x = currentLocation.x - pending.position.x, .y = currentLocation.y - pending.position.y});
       } else {
         // Simple click, recognized by listen()

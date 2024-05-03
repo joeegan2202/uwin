@@ -8,9 +8,10 @@
 
 class Window {
 public:
-	Window(std::string n, int mfd, int w, int h, int x, int y);
+	Window(int id, std::string n, int mfd, int w, int h, int x, int y);
 	~Window();
 	Framebuffer framebuffer;
+  int id;
 	int memFd;
   Rectangle bounds;
 	std::string name;

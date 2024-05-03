@@ -1,18 +1,16 @@
 #include "Panel.hpp"
 #include "Font.hpp"
 
-Panel::Panel() : bar("bar.bmp"), buttonLeft("buttonLeft.bmp"), buttonRight("buttonRight.bmp"), buttonFill("buttonFill.bmp") {
+Panel::Panel() : bar("bar.bmp"), buttonLeft("buttonLeft.bmp"), buttonRight("buttonRight.bmp"), buttonFill("buttonFill.bmp") {}
 
-}
-
-Framebuffer Panel::getPanel(const std::unordered_map<int, Window *> &windows) {
+Framebuffer Panel::getPanel(const std::unordered_map<int, WindowHolder> &windows) {
   Framebuffer framebuffer(1920, 24, 4);
 
   framebuffer.blit(bar, 0, 0);
 
   int windows_x_index = 1;
   for(auto [id, window] : windows) {
-    Framebuffer window_name_fb = FontManager::render(window->name);
+    Framebuffer window_name_fb = FontManager::render(window.w->name);
     Framebuffer button_fb(window_name_fb.getWidth() + buttonLeft.getXres() + buttonRight.getXres(), buttonFill.getYres(), 4);
 
     button_fb.blit(buttonLeft, 0, 0);

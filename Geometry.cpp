@@ -3,7 +3,7 @@
 Rectangle::Rectangle(Point a, Point b, Point c, Point d) : a(a), b(b), c(c), d(d) {}
 
 Rectangle Rectangle::fromTwoPoints(Point a, Point c) {
-	return Rectangle(a, Point{.x = a.x, .y = c.y}, c, Point{.x = c.x, .y = a.y});
+	return Rectangle(a, Point{.x = c.x, .y = a.y}, c, Point{.x = a.x, .y = c.y});
 }
 
 Rectangle Rectangle::fromWidthHeight(Point a, int w, int h) {

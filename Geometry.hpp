@@ -5,6 +5,10 @@ struct Point {
 	int x, y;
 };
 
+/*
+ * a   b
+ * d   c
+ */
 class Rectangle {
 public:
 	static Rectangle fromTwoPoints(Point a, Point c);

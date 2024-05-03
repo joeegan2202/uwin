@@ -11,6 +11,7 @@
 
 class Image {
 public:
+    Image();
     explicit Image(std::string file_location);
     [[nodiscard]] int getXres() const { return xres; }
     [[nodiscard]] int getYres() const { return yres; }
